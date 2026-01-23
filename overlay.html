@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Famista Scoreboard Overlay</title>
+  <style>
+    :root{
+      --frame:#c8c8c8;
+      --frame2:#6f6f6f;
+      --panel:#1f1f1f;
+      --panel2:#2a2a2a;
+      --text:#f2f2f2;
+      --muted:#cfcfcf;
+      --yellow:#ffd94a;
+      --hole:#0f0f0f;
+      --holeEdge:#3a3a3a;
+      --away:#2d66c3;
+      --home:#121212;
+      --scoreBg:#f6f6f6;
+      --scoreText:#111;
+      --bat:#d21a1a;
+    }
+
+    html, body { margin:0; padding:0; background:transparent; overflow:hidden; }
+    body{ font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans JP", sans-serif; }
+
+    /* OBSで位置調整する前提：左上に置く */
+    .hud{
+      position:absolute;
+      left: 20px;
+      bottom: 20px;
+      width: 420px;
+      height: 160px;
+
+      background: linear-gradient(180deg, rgba(40,40,40,.94), rgba(25,25,25,.94));
+      border-radius: 12px;
+      border: 3px solid var(--frame);
+      box-shadow: 0 12px 24px rgba(0,0,0,.45);
+    }
+    .hud::before{
+      content:"";
+      position:absolute;
+      inset: 3px;
+      border-radius: 9px;
+      border: 2px solid rgba(0,0,0,.35);
+      pointer-events:none;
+    }
+
+    /* 上段バー */
+    .topbar{
+      height: 32px;
+      display:flex;
+      align-items:center;
+      justify-content: space-between;
+      padding: 0 10px;
+      border-bottom: 2px solid rgba(255,255,255,.08);
+      color: var(--text);
+      font-weight: 700;
+      letter-spacing: .4px;
+    }
+    .topbar .left{
+      display:flex;
+      align-items:baseline;
+      gap: 8px;
+    }
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap: 8px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.10);
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .bigInning{
+      font-size: 16px;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* 本体レイアウト */
+    .main{
+      display:flex;
+      gap: 10px;
+      padding: 10px;
+      height: calc(100% - 32px);
+      box-sizing: border-box;
+    }
+
+    /* 左：チーム＋スコア */
+    .teams{
+      width: 210px;
+      display:flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .teamRow{
+      position: relative;
+      height: 48px;
+      display:flex;
+      align-items:center;
+      gap: 8px;
+    }
+    .batBar{
+      width: 8px;
+      height: 44px;
+      border-radius: 4px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.10);
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.35);
+    }
+    .batBar.on{
+      background: var(--bat);
+      border-color: rgba(255,255,255,.20);
+      box-shadow: 0 0 10px rgba(210,26,26,.45);
+    }
+
+    .nameBox{
+      width: 54px;
+      height: 42px;
+      border-radius: 8px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color: #fff;
+      font-weight: 800;
+      border: 2px solid rgba(255,255,255,.12);
+      box-shadow: inset 0 -8px 0 rgba(0,0,0,.20);
+      overflow:hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      padding: 0 6px;
+      box-sizing: border-box;
+    }
+    .nameBox.away{ background: var(--away); }
+    .nameBox.home{ background: var(--home); }
+
+    .scoreBox{
+      width: 64px;
+      height: 42px;
+      border-radius: 8px;
+      background: var(--scoreBg);
+      border: 2px solid rgba(0,0,0,.25);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color: var(--scoreText);
+      font-weight: 900;
+      font-size: 24px;
+      font-variant-numeric: tabular-nums;
+      box-shadow: inset 0 -8px 0 rgba(0,0,0,.08);
+    }
+
+    /* 右：塁＋BSO */
+    .right{
+      flex:1;
+      display:flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .inningRow{
+      height: 38px;
+      border-radius: 10px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.10);
+      display:flex;
+      align-items:center;
+      justify-content: space-between;
+      padding: 0 10px;
+      box-sizing: border-box;
+      color: var(--text);
+      font-weight: 800;
+    }
+    .inningRow .small{
+      color: var(--muted);
+      font-weight: 700;
+      font-size: 12px;
+    }
+    .inningRow .val{
+      font-variant-numeric: tabular-nums;
+      font-size: 18px;
+    }
+
+    .mid{
+      display:flex;
+      align-items:center;
+      justify-content: space-between;
+      gap: 10px;
+      flex:1;
+    }
+
+    /* ダイヤ */
+    .diamondWrap{
+      width: 110px;
+      height: 90px;
+      border-radius: 10px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.10);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .diamond{
+    position: relative;
+    width: 70px;
+    height: 70px;
+    transform: rotate(135deg); /* ★ 45→135（+90°） */
+    border-radius: 12px;
+    background: rgba(0,0,0,.20);
+    border: 1px solid rgba(255,255,255,.12);
+    box-shadow: inset 0 0 0 2px rgba(0,0,0,.25);
+    }
+    .base{
+      position:absolute;
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      background: rgba(0,0,0,.22);
+      border: 1px solid rgba(255,255,255,.14);
+      transform: rotate(-45deg);
+      box-shadow: inset 0 -4px 0 rgba(0,0,0,.25);
+    }
+    .base.on{
+      background: var(--yellow);
+      border-color: rgba(255,255,255,.25);
+      box-shadow: 0 0 10px rgba(255,217,74,.45), inset 0 -4px 0 rgba(0,0,0,.12);
+    }
+    .b1{ left: 27px; top: 8px; }     /* 1B -> 上 */
+    .b2{ left: 8px;  top: 27px; }    /* 2B -> 左 */
+    .b3{ right: 8px; top: 27px; }    /* 3B -> 右 */
+
+    /* BSO */
+    .bso{
+      flex:1;
+      height: 90px;
+      border-radius: 10px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.10);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: 8px 10px;
+      box-sizing: border-box;
+      gap: 10px;
+    }
+    .bsoCol{
+      display:flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+    }
+    .bsoRow{
+      display:flex;
+      align-items:center;
+      gap: 10px;
+    }
+    .lbl{
+      width: 16px;
+      color: var(--muted);
+      font-weight: 900;
+      font-size: 14px;
+    }
+    .holes{
+      display:flex;
+      gap: 8px;
+      align-items:center;
+    }
+    .hole{
+      width: 16px;
+      height: 16px;
+      border-radius: 999px;
+      background: var(--hole);
+      border: 1px solid var(--holeEdge);
+      box-shadow: inset 0 0 0 2px rgba(0,0,0,.35);
+    }
+    .hole.on{
+      background: var(--yellow);
+      border-color: rgba(255,255,255,.22);
+      box-shadow: 0 0 10px rgba(255,217,74,.45), inset 0 0 0 2px rgba(0,0,0,.15);
+    }
+
+    /* 下段（デバッグ/更新時刻は控えめ） */
+    .foot{
+      height: 20px;
+      display:flex;
+      align-items:center;
+      justify-content: space-between;
+      padding: 0 10px 6px;
+      color: rgba(255,255,255,.35);
+      font-size: 11px;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="hud">
+    <div class="topbar">
+      <div class="left">
+        <div class="pill">FAMISTA</div>
+        <div class="bigInning" id="topInning">1回表</div>
+      </div>
+      <div class="pill" id="topMode">MODE --</div>
+    </div>
+
+    <div class="main">
+      <div class="teams">
+        <div class="teamRow" id="rowAway">
+          <div class="batBar" id="batAway"></div>
+          <div class="nameBox away" id="awayName">AWAY</div>
+          <div class="scoreBox" id="awayRuns">0</div>
+        </div>
+
+        <div class="teamRow" id="rowHome">
+          <div class="batBar" id="batHome"></div>
+          <div class="nameBox home" id="homeName">HOME</div>
+          <div class="scoreBox" id="homeRuns">0</div>
+        </div>
+      </div>
+
+      <div class="right">
+        <div class="inningRow">
+          <div class="small">INNING</div>
+          <div class="val" id="inningVal">1回表</div>
+        </div>
+
+        <div class="mid">
+          <div class="diamondWrap">
+            <div class="diamond">
+              <div class="base b1" id="b1"></div>
+              <div class="base b2" id="b2"></div>
+              <div class="base b3" id="b3"></div>
+            </div>
+          </div>
+
+          <div class="bso">
+            <div class="bsoCol">
+              <div class="bsoRow">
+                <div class="lbl">B</div>
+                <div class="holes" id="ballsHoles"></div>
+              </div>
+              <div class="bsoRow">
+                <div class="lbl">S</div>
+                <div class="holes" id="strikesHoles"></div>
+              </div>
+              <div class="bsoRow">
+                <div class="lbl">O</div>
+                <div class="holes" id="outsHoles"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="foot">
+          <div id="bsoText">B/S/O 0/0/0</div>
+          <div id="updText">--</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const el = (id)=>document.getElementById(id);
+
+  // ファミスタっぽい上限
+  const MAX_B = 3, MAX_S = 2, MAX_O = 2;
+
+  function renderHoles(container, max, value){
+    container.innerHTML = "";
+    const v = Math.max(0, Math.min(value, max));
+    for(let i=0;i<max;i++){
+      const d = document.createElement("div");
+      d.className = "hole" + (i < v ? " on" : "");
+      container.appendChild(d);
+    }
+  }
+
+  function fmtTime(ts){
+    if(!ts) return "--";
+    const d = new Date(ts * 1000);
+    const hh = String(d.getHours()).padStart(2,"0");
+    const mm = String(d.getMinutes()).padStart(2,"0");
+    const ss = String(d.getSeconds()).padStart(2,"0");
+    return `${hh}:${mm}:${ss}`;
+  }
+
+  async function tick(){
+    try{
+      const r = await fetch("/state.json?ts=" + Date.now(), { cache: "no-store" });
+      const s = await r.json();
+
+      const inning = s.inning ?? 1;
+      const side = s.side ?? "表";
+      const inningText = `${inning}回${side}`;
+      el("inningVal").textContent = inningText;
+      el("topInning").textContent = inningText;
+
+      el("homeName").textContent = s.home_name ?? "HOME";
+      el("awayName").textContent = s.away_name ?? "AWAY";
+      el("homeRuns").textContent = s.home ?? 0;
+      el("awayRuns").textContent = s.away ?? 0;
+
+      const b = s.balls ?? 0;
+      const st = s.strikes ?? 0;
+      const o = s.outs ?? 0;
+
+      renderHoles(el("ballsHoles"), MAX_B, b);
+      renderHoles(el("strikesHoles"), MAX_S, st);
+      renderHoles(el("outsHoles"), MAX_O, o);
+
+      el("bsoText").textContent = `B/S/O ${b}/${st}/${o}`;
+      el("updText").textContent = fmtTime(s.updated_at);
+
+      el("b1").classList.toggle("on", !!s.on1);
+      el("b2").classList.toggle("on", !!s.on2);
+      el("b3").classList.toggle("on", !!s.on3);
+
+      // 攻撃側の赤バー：表=AWAY、裏=HOME
+      el("batAway").classList.toggle("on", side === "表");
+      el("batHome").classList.toggle("on", side === "裏");
+
+      const m1 = s.mode1_hex ?? "--";
+      const m2 = s.mode2_hex ?? "--";
+      el("topMode").textContent = `MODE C0D3=${m1} C0CE=${m2}`;
+
+    }catch(e){
+      // 取得失敗時も最後の描画を維持
+    }
+  }
+
+  tick();
+  setInterval(tick, 100);
+</script>
+</body>
+</html>
